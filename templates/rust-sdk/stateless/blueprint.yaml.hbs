@@ -1,0 +1,76 @@
+name: {{name}}-blueprint
+# Blueprint de ambiente para {{name}} — MCP server (Rust / stateless)
+# Adapta a metodologia declarativa estilo Devin, sem usar Devin.
+
+initialize:
+  - name: Install Rust (stable)
+    run: |
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+      source $HOME/.cargo/env
+      rustup component add clippy rustfmt
+
+  - name: Install cargo-audit (security scanner)
+    run: cargo install cargo-audit || true
+
+maintenance:
+  - name: Build
+    run: cargo build --release
+
+  - name: Verify build
+    run: |
+      test -f target/release/{{name}}
+      ./target/release/{{name}} --help 2>&1 | head -1 || true
+
+knowledge:
+  - name: lint
+    contents: |
+      cargo clippy -- -D warnings
+
+  - name: format
+    contents: |
+      cargo fmt --all -- --check
+
+      Auto-fix:
+      cargo fmt --all
+
+  - name: test
+    contents: |
+      Run all tests:
+      cargo test --verbose
+
+      Run with coverage (requer cargo-tarpaulin):
+      cargo tarpaulin --out Html
+
+  - name: build
+    contents: |
+      cargo build --release
+
+      Output: target/release/{{name}}
+
+  - name: audit
+    contents: |
+      Security audit:
+      cargo audit
+
+  - name: run-server
+    contents: |
+      Run the MCP server (stdio):
+      ./target/release/{{name}}
+
+      Test with JSON-RPC via stdin:
+      echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | ./target/release/{{name}}
+
+clone:
+  path: {{name}}
+  ref: main
+  depth: 0
+  tags: true
+  submodules: recursive
+  lfs: false
+
+env:
+  RUST_BACKTRACE: "1"
+  MCP_PATTERN: stateless
+  MCP_SDK: rust
+
+secrets: []

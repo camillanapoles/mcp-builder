@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "mcp-builder": {
+      "command": "node",
+      "args": [
+        "/home/z/my-project/mcp-builder/builder/dist/cli/index.js",
+        "serve"
+      ],
+      "env": {
+        "NODE_PATH": "/home/z/my-project/mcp-builder/builder/node_modules"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+/**
+ * Registry + Factory base classes.
+ */
+export class Registry {
+  private data: Map<string, Map<string, unknown>> = new Map();
+
+  register(type: string, id: string, obj: unknown): void {
+    if (!this.data.has(type)) this.data.set(type, new Map());
+    this.data.get(type)!.set(id, obj);
+  }
+
+  get<T>(type: string, id: string): T | undefined {
+    return this.data.get(type)?.get(id) as T | undefined;
+  }
+
+  list<T>(type: string): T[] {
+    const col = this.data.get(type);
+    if (!col) return [];
+    return Array.from(col.values()) as T[];
+  }
+
+  delete(type: string, id: string): boolean {
+    return this.data.get(type)?.delete(id) ?? false;
+  }
+
+  clear(): void { this.data.clear(); }
+}
+
+export const registry = new Registry();
+
+export abstract class Factory<T> {
+  abstract typeName: string;
+  protected registry: Registry = registry;
+  abstract create(...args: unknown[]): T;
+  list(): T[] { return this.registry.list<T>(this.typeName); }
+  get(id: string): T | undefined { return this.registry.get<T>(this.typeName, id); }
+  delete(id: string): boolean { return this.registry.delete(this.typeName, id); }
+}

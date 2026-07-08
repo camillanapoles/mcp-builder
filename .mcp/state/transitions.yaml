@@ -1,0 +1,46 @@
+# FSM Transitions — Alfabeto de eventos + função de transição
+# Cada transição dispara um workflow GitHub Action correspondente.
+
+transitions:
+  # Caminho feliz (happy path)
+  - from: draft
+    to: scaffolded
+    event: scaffold.complete
+    action_workflow: scaffold.yml
+    advisor_required: true
+
+  - from: scaffolded
+    to: tested
+    event: scaffold.validated
+    action_workflow: test.yml
+    advisor_required: true
+
+  - from: tested
+    to: validated
+    event: tests.passed
+    action_workflow: e2e.yml
+    advisor_required: true
+
+  - from: validated
+    to: released
+    event: e2e.passed
+    action_workflow: release.yml
+    advisor_required: true
+
+  # Caminho de falha (curinga — captura qualquer *.failed)
+  - from: "*"
+    to: failed
+    event: "*.failed"
+    action_workflow: advisor-block.yml
+
+  # Recuperação — advisor libera após correção
+  - from: failed
+    to: draft
+    event: advisor.cleared
+    action_workflow: reset.yml
+
+  # Deprecamento manual
+  - from: released
+    to: archived
+    event: manual.archive
+    action_workflow: archive.yml

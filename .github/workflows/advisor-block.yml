@@ -1,0 +1,170 @@
+# Advisor-Block workflow — materializa transição * → failed
+#
+# Disparado por qualquer workflow que falha. Coleta contexto, abre issue
+# com motivo + sugestões, aguarda correção humana.
+
+name: Advisor Block
+
+on:
+  workflow_dispatch:
+    inputs:
+      failed_workflow:
+        description: "Workflow que falhou"
+        required: true
+        type: string
+      run_id:
+        description: "Run ID do workflow falho"
+        required: true
+        type: string
+      reason:
+        description: "Motivo do bloqueio (event name)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  collect-and-block:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect failure context
+        id: ctx
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: parseInt('${{ inputs.run_id }}')
+            });
+            core.setOutput('html_url', run.data.html_url);
+            core.setOutput('conclusion', run.data.conclusion);
+            core.setOutput('head_branch', run.data.head_branch);
+            core.setOutput('commit_sha', run.data.head_sha);
+
+      - name: Analyze failure reason
+        id: analyze
+        run: |
+          REASON="${{ inputs.reason }}"
+          case "$REASON" in
+            scaffold.failed)
+              TITLE="🚫 Scaffold failed — gate/advisor blocked project generation"
+              SUGGESTIONS="- Verifique se a spec está válida (mcp-builder validate)
+          - Confira se o template ${SDK}/${PATTERN} existe
+          - Veja logs do workflow para detalhes"
+              ;;
+            tests.failed)
+              TITLE="🚫 Tests failed — coverage or property invariant violated"
+              SUGGESTIONS="- Rode pytest localmente com --cov-fail-under=80
+          - Verifique se property tests passam (hypothesis)
+          - Adicione testes para branches não-cobertas"
+              ;;
+            e2e.failed)
+              TITLE="🚫 E2E failed — MCP server não respondeu ou FSM inválido"
+              SUGGESTIONS="- Inicie o server localmente e valide tools/list
+          - Confira se .mcp/state/*.yaml são YAML válidos
+          - Verifique determinismo: hash deve bater entre runs"
+              ;;
+            release.failed)
+              TITLE="🚫 Release blocked — mutation score abaixo do threshold (70%)"
+              SUGGESTIONS="- Rode mutmut localmente
+          - Fortaleça testes em mutantes sobreviventes
+          - Ou justifique via ADR se for mutante equivalente"
+              ;;
+            *)
+              TITLE="🚫 Workflow ${{ inputs.failed_workflow }} falhou"
+              SUGGESTIONS="- Veja logs: ${{ steps.ctx.outputs.html_url }}"
+              ;;
+          esac
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          {
+            echo "suggestions<<EOF"
+            echo "$SUGGESTIONS"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Open or update issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `${{ steps.analyze.outputs.title }}`;
+            const body = `## Failure context
+
+            | Field | Value |
+            |---|---|
+            | Workflow | ${{ inputs.failed_workflow }} |
+            | Run ID | ${{ inputs.run_id }} |
+            | Reason | ${{ inputs.reason }} |
+            | Branch | ${{ steps.ctx.outputs.head_branch }} |
+            | Commit | ${{ steps.ctx.outputs.commit_sha }} |
+            | URL | ${{ steps.ctx.outputs.html_url }} |
+
+            ## Suggested actions
+
+            ${{ steps.analyze.outputs.suggestions }}
+
+            ## Recovery
+
+            Quando corrigido, comente neste issue:
+            \`\`\`
+            /advisor-clear
+            \`\`\`
+            Para disparar o workflow \`reset.yml\` e voltar ao estado \`draft\`.
+
+            ---
+            _Automated by advisor-block workflow_`;
+
+            // Search for existing open issue with same title
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['advisor-block']
+            });
+            const existing = issues.data.find(i => i.title === title);
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body
+              });
+              core.notice(`Updated issue #${existing.number}`);
+            } else {
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['advisor-block', 'auto-generated']
+              });
+              core.notice(`Created issue #${newIssue.data.number}`);
+            }
+
+      - name: Update FSM state file
+        run: |
+          mkdir -p .mcp/state
+          cat > .mcp/state/current.json << EOF
+          {
+            "state": "failed",
+            "previous_state": "draft|scaffolded|tested|validated",
+            "blocked_by": "${{ inputs.failed_workflow }}",
+            "block_reason": "${{ inputs.reason }}",
+            "run_id": "${{ inputs.run_id }}",
+            "blocked_at": "$(date -u +%FT%TZ)"
+          }
+          EOF
+          cat .mcp/state/current.json
+
+      - name: Upload failure artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: advisor-block-${{ inputs.run_id }}
+          path: .mcp/state/current.json
+          retention-days: 90

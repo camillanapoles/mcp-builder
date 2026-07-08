@@ -1,0 +1,53 @@
+name: echo-stateless-blueprint
+# Blueprint de ambiente para echo-stateless — MCP server de exemplo (Python / stateless)
+# Demostra o uso do blueprint.yaml no MCP gerado.
+
+initialize:
+  - name: Install Python 3.12
+    uses: github.com/actions/setup-python@v5
+    with:
+      python-version: "3.12"
+      cache: "pip"
+      cache-dependency-path: pyproject.toml
+
+maintenance:
+  - name: Install dependencies
+    run: pip install -e ".[dev]"
+
+  - name: Verify install
+    run: python -c "import echo_stateless; print('version:', echo_stateless.__version__)"
+
+knowledge:
+  - name: lint
+    contents: |
+      ruff check src tests
+
+  - name: typecheck
+    contents: |
+      mypy src
+
+  - name: test
+    contents: |
+      pytest -v --cov=echo_stateless --cov-fail-under=80
+
+  - name: run-server
+    contents: |
+      python -m echo_stateless.server
+
+      Test JSON-RPC:
+      echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python -m echo_stateless.server
+
+clone:
+  path: echo-stateless
+  ref: main
+  depth: 0
+  tags: true
+  submodules: recursive
+  lfs: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  MCP_PATTERN: stateless
+  MCP_SDK: python
+
+secrets: []

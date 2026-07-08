@@ -1,0 +1,44 @@
+"""MCP resources — read-only context exposed to the LLM."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+
+
+def register_resources(mcp: FastMCP) -> None:
+    """Register all read-only resources on the MCP server."""
+
+    @mcp.resource("schema://tools")
+    def list_tools_schema() -> dict[str, Any]:
+        """Expose the JSON Schema of all tools for introspection."""
+        return {
+            "server": "{{name}}",
+            "pattern": "stateless",
+            "tools": [
+                {{#each tools}}
+                {
+                    "name": "{{name}}",
+                    "description": {{json description}},
+                    "inputSchema": {{json inputSchema}}
+                }{{#unless @last}},{{/unless}}
+                {{/each}}
+            ],
+        }
+
+    @mcp.resource("state://fsm")
+    def current_state() -> dict[str, str]:
+        """Current FSM state. Stateless MCP returns 'idle' always."""
+        return {"state": "idle", "pattern": "stateless"}
+
+    @mcp.resource("meta://info")
+    def server_info() -> dict[str, str]:
+        """Server metadata."""
+        return {
+            "name": "{{name}}",
+            "description": "{{description}}",
+            "version": "0.1.0",
+            "pattern": "stateless",
+            "sdk": "python",
+        }

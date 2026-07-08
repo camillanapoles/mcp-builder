@@ -1,0 +1,76 @@
+"""Factories — typed object creation for {{name}}.
+
+Each factory:
+1. Validates input against JSON Schema
+2. Instantiates a Pydantic model
+3. Registers in the global registry
+4. Returns the object
+"""
+
+from __future__ import annotations
+
+from typing import Any, Type
+from uuid import uuid4
+
+from pydantic import BaseModel
+
+from ..registry import registry
+from ..validators import validate_input
+
+
+class Factory:
+    """Generic factory. Subclass per object type."""
+
+    type_name: str = "object"
+    model: Type[BaseModel] = BaseModel
+    schema: dict[str, Any] = {"type": "object", "properties": {}}
+
+    @classmethod
+    def create(cls, **payload: Any) -> BaseModel:
+        """Validate input, instantiate, register, return."""
+        validate_input(cls.schema, payload)
+        obj = cls.model(**payload)
+        obj_id = str(uuid4())
+        registry.register(cls.type_name, obj_id, obj)
+        return obj
+
+    @classmethod
+    def get(cls, id_: str) -> BaseModel | None:
+        return registry.get(cls.type_name, id_)
+
+    @classmethod
+    def list(cls) -> list[BaseModel]:
+        return registry.list(cls.type_name)
+
+
+{{#each tools}}
+class {{pascalCase name}}Model(BaseModel):
+    """Pydantic model for {{name}} objects."""
+    {{#if inputSchema.properties}}
+    {{#each inputSchema.properties}}
+    {{@key}}: str = ""
+    {{/each}}
+    {{else}}
+    name: str = ""
+    {{/if}}
+
+
+class {{pascalCase name}}Factory(Factory):
+    """Factory for {{name}} objects."""
+    type_name = "{{name}}"
+    model = {{pascalCase name}}Model
+    schema = {{{json inputSchema}}}
+
+
+{{/each}}
+
+{{#unless tools}}
+class DefaultModel(BaseModel):
+    name: str
+
+
+class DefaultFactory(Factory):
+    type_name = "default"
+    model = DefaultModel
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+{{/unless}}

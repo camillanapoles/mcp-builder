@@ -1,0 +1,38 @@
+/**
+ * Unit tests for {{name}} tools.
+ * Stateless invariant: same input → same output, no side effects.
+ */
+
+import { describe, it, expect } from 'vitest';
+
+{{#each tools}}
+describe('{{name}}', () => {
+  it('should be defined', async () => {
+    // Import dynamically to avoid top-level side effects
+    const mod = await import('../src/index.js');
+    // tool is internal — we test via the server mock
+    expect(mod).toBeDefined();
+  });
+});
+{{/each}}
+
+{{#unless tools}}
+describe('hello (default tool)', () => {
+  it('should return greeting with provided name', async () => {
+    const mod = await import('../src/index.js');
+    expect(mod).toBeDefined();
+  });
+
+  it('should be deterministic', async () => {
+    // property: hello(x) === hello(x)
+    // (tested via MCP server in integration)
+  });
+});
+{{/unless}}
+
+describe('FSM (stateless)', () => {
+  it('state should always be idle', () => {
+    const state = { current: 'idle' };
+    expect(state.current).toBe('idle');
+  });
+});

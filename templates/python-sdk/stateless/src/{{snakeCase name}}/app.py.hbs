@@ -1,0 +1,11 @@
+"""App module — single FastMCP instance shared across tools.
+
+Avoids circular imports: tools.py imports `mcp` from here, server.py imports
+`tools` (which triggers registration) then runs `mcp`.
+"""
+
+from __future__ import annotations
+
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("{{name}}")

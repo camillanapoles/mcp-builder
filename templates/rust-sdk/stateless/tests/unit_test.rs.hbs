@@ -1,0 +1,33 @@
+//! Unit tests for {{name}} tools.
+
+{{#each tools}}
+#[test]
+fn test_{{snakeCase name}}_returns_string() {
+    let result = {{snakeCase name}}();
+    assert!(!result.is_empty());
+}
+
+#[test]
+fn test_{{snakeCase name}}_deterministic() {
+    let r1 = {{snakeCase name}}();
+    let r2 = {{snakeCase name}}();
+    assert_eq!(r1, r2);
+}
+{{/each}}
+
+{{#unless tools}}
+#[test]
+fn test_hello_default() {
+    assert_eq!(hello(""), "Hello, world!");
+}
+
+#[test]
+fn test_hello_with_name() {
+    assert_eq!(hello("agent"), "Hello, agent!");
+}
+
+#[test]
+fn test_hello_deterministic() {
+    assert_eq!(hello("x"), hello("x"));
+}
+{{/unless}}

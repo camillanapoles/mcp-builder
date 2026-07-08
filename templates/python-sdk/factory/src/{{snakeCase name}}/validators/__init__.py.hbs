@@ -1,0 +1,21 @@
+"""Validators — JSON Schema validation for factory inputs."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from jsonschema import validate, ValidationError
+
+
+def validate_input(schema: dict[str, Any], payload: dict[str, Any]) -> None:
+    """Raise ValidationError if payload doesn't match schema."""
+    validate(instance=payload, schema=schema)
+
+
+def is_valid(schema: dict[str, Any], payload: dict[str, Any]) -> bool:
+    """Return True if payload matches schema."""
+    try:
+        validate_input(schema, payload)
+        return True
+    except ValidationError:
+        return False

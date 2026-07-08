@@ -1,0 +1,44 @@
+# FSM States — Source of truth determinístico para o ciclo de vida de MCP servers
+# Editado por humanos + advisor hook. Cada mudança é um commit = event sourcing.
+
+states:
+  draft:
+    description: "Spec escrita, código ainda não gerado"
+    on_enter:
+      - gate.validate_spec
+      - advisor.check_compliance
+
+  scaffolded:
+    description: "Builder gerou código a partir do template"
+    on_enter:
+      - gate.validate_structure
+      - monitor.collect_metrics
+
+  tested:
+    description: "Todos os 5 níveis de teste passaram"
+    on_enter:
+      - gate.validate_tests
+      - advisor.check_coverage
+
+  validated:
+    description: "E2E via Actions executou com sucesso"
+    on_enter:
+      - monitor.validate_determinism
+      - advisor.sign_off
+
+  released:
+    description: "Tag git criada, artifact publicado"
+    on_enter:
+      - trigger.publish_artifact
+      - monitor.notify
+    terminal: true
+
+  failed:
+    description: "Advisor bloqueou — aguarda correção"
+    on_enter:
+      - advisor.collect_failure
+      - trigger.open_issue
+
+  archived:
+    description: "Deprecado, sem novas transições"
+    terminal: true

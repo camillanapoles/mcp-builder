@@ -1,0 +1,66 @@
+"""Factory-pattern tests for {{name}}."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{snakeCase name}}.registry import registry
+from {{snakeCase name}}.factories import (
+    {{#each tools}}
+    {{pascalCase name}}Factory,
+    {{/each}}
+    {{#unless tools}}
+    DefaultFactory,
+    {{/unless}}
+)
+
+
+@pytest.fixture(autouse=True)
+def reset_registry():
+    registry.clear()
+    yield
+    registry.clear()
+
+
+{{#each tools}}
+class Test{{pascalCase name}}Factory:
+    def test_create_returns_object(self):
+        obj = {{pascalCase name}}Factory.create()
+        assert obj is not None
+
+    def test_create_registers_in_registry(self):
+        obj = {{pascalCase name}}Factory.create()
+        all_objs = {{pascalCase name}}Factory.list()
+        assert obj in all_objs
+
+    def test_list_returns_empty_after_clear(self):
+        assert {{pascalCase name}}Factory.list() == []
+{{/each}}
+
+{{#unless tools}}
+class TestDefaultFactory:
+    def test_create(self):
+        obj = DefaultFactory.create(name="test")
+        assert obj.name == "test"
+
+    def test_list(self):
+        DefaultFactory.create(name="a")
+        DefaultFactory.create(name="b")
+        assert len(DefaultFactory.list()) == 2
+
+    def test_invalid_input_rejected(self):
+        from {{snakeCase name}}.validators import is_valid
+        assert not is_valid({"type": "string"}, 123)  # wrong type
+{{/unless}}
+
+
+def test_registry_isolation():
+    """Registry should be clearable independently."""
+    {{#if tools}}
+    {{pascalCase (lookup tools.[0] 'name')}}Factory.create()
+    {{else}}
+    DefaultFactory.create(name="x")
+    {{/if}}
+    assert len(registry._objects) > 0
+    registry.clear()
+    assert len(registry._objects) == 0

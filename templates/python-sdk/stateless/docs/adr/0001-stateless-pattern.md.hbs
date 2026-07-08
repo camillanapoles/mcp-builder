@@ -1,0 +1,43 @@
+# ADR-0001: Stateless Execution Pattern
+
+**Status**: Aprovado • **Data**: geração automática
+
+## Contexto
+
+Este MCP server foi gerado pelo mcp-builder no padrão **stateless**. Decidimos
+adotar este padrão para garantir:
+
+- Determinismo puro (mesma input → mesma output)
+- Testabilidade máxima (funções puras, sem mocks)
+- Escalabilidade horizontal (sem estado compartilhado entre instâncias)
+- Auditoria trivial (cada chamada é independente)
+
+## Decisão
+
+Implementar todas as tools como funções puras decoradas com `@mcp.tool()`.
+Sem estado global mutável. Sem side effects. Sem I/O não-determinístico.
+
+## Consequências
+
+### Positivas
+- Property-based testing trivial (Hypothesis)
+- Mutation testing efetivo (mutmut)
+- Replay determinístico
+- Cache agressivo possível
+
+### Negativas
+- Não serve para tools que precisam manter sessão (ex: chat multi-turn)
+- Não suporta estado entre chamadas (precisa persistir externamente)
+- Event-driven é mais apropriado para reatividade
+
+## Quando trocar de padrão
+
+Se este MCP precisar:
+- Reagir a eventos externos → trocar para `event` pattern
+- Criar objetos tipados complexos → trocar para `factory` pattern
+
+## Referências
+
+- docs/BLUEPRINT.md (no projeto mcp-builder)
+- https://modelcontextprotocol.io
+- https://github.com/jlowin/fastmcp

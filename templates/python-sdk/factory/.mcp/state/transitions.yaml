@@ -1,0 +1,21 @@
+transitions:
+  - from: idle
+    to: creating
+    event: factory.invoke
+    action_workflow: ci.yml
+  - from: creating
+    to: registered
+    event: validation.passed
+    action_workflow: ci.yml
+  - from: creating
+    to: failed
+    event: validation.failed
+    action_workflow: ci.yml
+  - from: registered
+    to: idle
+    event: object.returned
+    action_workflow: ci.yml
+  - from: "*"
+    to: failed
+    event: "*.failed"
+    action_workflow: ci.yml

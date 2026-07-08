@@ -1,0 +1,57 @@
+"""Event-driven tests for {{name}}."""
+
+from __future__ import annotations
+
+import pytest
+
+from {{snakeCase name}}.events import Event, bus
+from {{snakeCase name}}.state.projections import store
+
+
+@pytest.fixture(autouse=True)
+def reset_state():
+    """Clear bus + projection store between tests."""
+    bus._log.clear()
+    store.clear()
+    yield
+    bus._log.clear()
+    store.clear()
+
+
+async def test_event_publish():
+    """Event should be appended to log."""
+    event = Event(type="test.event", payload={"k": "v"})
+    await bus.publish(event)
+    assert len(bus.replay()) == 1
+
+
+async def test_handler_called():
+    """Handler should be invoked when matching event is published."""
+    called = []
+    bus.subscribe("test.event", lambda e: called.append(e.type))
+    await bus.publish(Event(type="test.event", payload={}))
+    assert called == ["test.event"]
+
+
+def test_projection_upsert():
+    """Projection store should upsert by id."""
+    store.upsert("test", {"id": "1", "v": 10})
+    store.upsert("test", {"id": "1", "v": 20})  # update
+    assert store.get("test", "1")["v"] == 20
+
+
+def test_projection_list():
+    store.upsert("test", {"id": "1"})
+    store.upsert("test", {"id": "2"})
+    docs = store.list("test")
+    assert len(docs) == 2
+
+
+{{#each tools}}
+async def test_{{name}}_publishes_event():
+    """{{name}} tool must publish to the event bus."""
+    from {{snakeCase name}}.server import {{name}}
+    result = await {{name}}()
+    assert "event_id" in result
+    assert len(bus.replay()) >= 1
+{{/each}}

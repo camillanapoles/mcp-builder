@@ -1,0 +1,69 @@
+name: {{name}}-blueprint
+# Blueprint de ambiente para {{name}} — MCP server (Go / stateless)
+# Adapta a metodologia declarativa estilo Devin, sem usar Devin.
+
+initialize:
+  - name: Install Go 1.22
+    uses: github.com/actions/setup-go@v5
+    with:
+      go-version: "1.22"
+      cache: true
+
+maintenance:
+  - name: Download dependencies
+    run: go mod download
+
+  - name: Build
+    run: go build -o {{name}} ./cmd/server
+
+  - name: Verify build
+    run: |
+      test -f {{name}}
+      ./{{name}} --help 2>&1 | head -1 || true
+
+knowledge:
+  - name: lint
+    contents: |
+      go vet ./...
+      golangci-lint run (se instalado)
+
+  - name: test
+    contents: |
+      Run all tests:
+      go test ./... -v -cover
+
+      Run with coverage profile:
+      go test ./... -coverprofile=coverage.out
+
+      View coverage:
+      go tool cover -html=coverage.out
+
+  - name: build
+    contents: |
+      go build -o {{name}} ./cmd/server
+
+      Cross-compile (Linux):
+      GOOS=linux GOARCH=amd64 go build -o {{name}}-linux-amd64 ./cmd/server
+
+  - name: run-server
+    contents: |
+      Run the MCP server (stdio):
+      ./{{name}}
+
+      Test with JSON-RPC via stdin:
+      echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | ./{{name}}
+
+clone:
+  path: {{name}}
+  ref: main
+  depth: 0
+  tags: true
+  submodules: recursive
+  lfs: false
+
+env:
+  CGO_ENABLED: "0"
+  MCP_PATTERN: stateless
+  MCP_SDK: go
+
+secrets: []

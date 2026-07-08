@@ -1,0 +1,59 @@
+"""{{name}} — factory-pattern MCP server."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+
+from .factories import (
+    {{#each tools}}
+    {{pascalCase name}}Factory,
+    {{/each}}
+    {{#unless tools}}
+    DefaultFactory,
+    {{/unless}}
+)
+
+logger = logging.getLogger("{{name}}")
+
+mcp = FastMCP("{{name}}")
+
+
+{{#each tools}}
+@mcp.tool()
+def create_{{name}}() -> dict[str, Any]:
+    """Create a {{name}} object via factory. {{description}}"""
+    obj = {{pascalCase name}}Factory.create()
+    return {"type": "{{name}}", "id": "n/a", "data": obj.model_dump()}
+
+
+@mcp.tool()
+def list_{{name}}() -> list[dict[str, Any]]:
+    """List all created {{name}} objects."""
+    return [o.model_dump() for o in {{pascalCase name}}Factory.list()]
+
+{{/each}}
+
+{{#unless tools}}
+@mcp.tool()
+def create_default(name: str = "") -> dict[str, Any]:
+    """Create a default object."""
+    obj = DefaultFactory.create(name=name)
+    return {"type": "default", "data": obj.model_dump()}
+
+
+@mcp.tool()
+def list_defaults() -> list[dict[str, Any]]:
+    return [o.model_dump() for o in DefaultFactory.list()]
+{{/unless}}
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()

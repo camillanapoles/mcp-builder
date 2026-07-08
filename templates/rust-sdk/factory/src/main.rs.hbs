@@ -1,0 +1,95 @@
+//! {{name}} — factory-pattern MCP server in Rust.
+//! {{description}}
+
+use rmcp::{
+    ServerHandler, model::*,
+    service::{RequestContext, serve_server},
+};
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use tokio::io::{stdin, stdout};
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct Object {
+    id: String,
+    type_name: String,
+    created_at: String,
+}
+
+#[derive(Default)]
+struct Registry { data: HashMap<String, Vec<Object>> }
+
+impl Registry {
+    fn register(&mut self, type_name: &str) -> Object {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let obj = Object {
+            id: format!("{:032x}", nanos),
+            type_name: type_name.to_string(),
+            created_at: format!("{}", nanos),
+        };
+        self.data.entry(type_name.to_string()).or_default().push(obj.clone());
+        obj
+    }
+    fn list_count(&self, type_name: &str) -> usize {
+        self.data.get(type_name).map(|v| v.len()).unwrap_or(0)
+    }
+}
+
+#[derive(Clone)]
+struct {{pascalCase name}}Server { registry: Arc<Mutex<Registry>> }
+
+impl ServerHandler for {{pascalCase name}}Server {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            server_info: Implementation { name: "{{name}}".into(), version: "0.1.0".into() },
+            capabilities: ServerCapabilities {
+                tools: Some(ToolsCapability { list_changed: None }),
+                ..Default::default()
+            },
+            instructions: Some("{{description}}".into()),
+            ..Default::default()
+        }
+    }
+
+    async fn list_tools(&self, _req: Option<PaginatedRequestParam>, _ctx: RequestContext<Arc<Self>>) -> std::result::Result<ListToolsResult, McpError> {
+        Ok(ListToolsResult {
+            tools: vec![
+                {{#each tools}}
+                Tool { name: "create_{{name}}".into(), description: Some("Create a {{name}}. {{description}}".into()), input_schema: Schema::default(), annotations: None },
+                Tool { name: "list_{{name}}".into(), description: Some("List {{name}} objects".into()), input_schema: Schema::default(), annotations: None },
+                {{/each}}
+                {{#unless tools}}
+                Tool { name: "create_default".into(), description: Some("Create a default object".into()), input_schema: Schema::default(), annotations: None },
+                Tool { name: "list_defaults".into(), description: Some("List default objects".into()), input_schema: Schema::default(), annotations: None },
+                {{/unless}}
+            ],
+            next_cursor: None,
+        })
+    }
+
+    async fn call_tool(&self, req: CallToolRequestParam, _ctx: RequestContext<Arc<Self>>) -> std::result::Result<CallToolResult, McpError> {
+        let mut reg = self.registry.lock().unwrap();
+        let result = match req.name.as_str() {
+            {{#each tools}}
+            "create_{{name}}" => { let obj = reg.register("{{name}}"); format!("created {{name}}, id: {}", obj.id) }
+            "list_{{name}}" => format!("{} {{name}} objects", reg.list_count("{{name}}")),
+            {{/each}}
+            {{#unless tools}}
+            "create_default" => { let obj = reg.register("default"); format!("created default, id: {}", obj.id) }
+            "list_defaults" => format!("{} default objects", reg.list_count("default")),
+            {{/unless}}
+            _ => return Err(McpError::invalid_request("unknown tool", None)),
+        };
+        Ok(CallToolResult { content: vec![Content::text(result)], structured_content: None, is_error: None })
+    }
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    eprintln!("[{{name}}] MCP server starting (factory pattern, stdio)");
+    let server = {{pascalCase name}}Server { registry: Arc::new(Mutex::new(Registry::default())) };
+    let transport = (stdin(), stdout());
+    serve_server(server, transport).await?;
+    Ok(())
+}

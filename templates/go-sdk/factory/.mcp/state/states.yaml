@@ -1,0 +1,11 @@
+states:
+  idle:
+    description: "Awaiting factory invocation"
+  creating:
+    description: "Validating input + instantiating object"
+  registered:
+    description: "Object registered, ready to return"
+    on_enter: [advisor.check_contracts]
+  failed:
+    description: "Validation or instantiation failed"
+    on_enter: [advisor.collect_failure]

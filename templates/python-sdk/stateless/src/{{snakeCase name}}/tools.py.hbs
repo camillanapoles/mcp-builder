@@ -1,0 +1,38 @@
+"""Tools for {{name}}.
+
+Each tool is decorated with @mcp.tool() to register with FastMCP.
+Stateless pattern: pure functions, no side effects, deterministic output.
+"""
+
+from __future__ import annotations
+
+from .app import mcp
+
+
+{{#each tools}}
+# ============================================================================
+# {{name}} — {{description}}
+# ============================================================================
+
+@mcp.tool()
+def {{name}}() -> str:
+    """{{description}}
+
+    Stateless tool — same input always produces same output.
+    Input schema:
+    {{{json inputSchema}}}
+    """
+    # TODO: implement business logic for {{name}}
+    return "{{name}} executed successfully"
+
+
+{{/each}}
+
+{{#unless tools}}
+# No tools declared in spec. Add @mcp.tool() functions here.
+
+@mcp.tool()
+def hello(name: str = "world") -> str:
+    """Default hello tool."""
+    return f"Hello, {name}!"
+{{/unless}}

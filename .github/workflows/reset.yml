@@ -1,0 +1,113 @@
+# Reset workflow — materializa transição failed → draft
+#
+# Disparado quando advisor recebe sinal "cleared" (humano comenta /advisor-clear
+# na issue, ou auto-fix merge). Limpa estado de falha e volta para draft.
+
+name: Reset
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number que está sendo cleared"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  check-clear-command:
+    if: github.event_name == 'issue_comment' && contains(github.event.comment.body, '/advisor-clear')
+    runs-on: ubuntu-latest
+    outputs:
+      should_reset: ${{ steps.check.outputs.should_reset }}
+    steps:
+      - name: Validate command author has write access
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const commenter = context.payload.comment.user.login;
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: commenter
+            });
+            if (!['admin', 'write', 'maintain'].includes(perm.permission)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `@${commenter} você não tem permissão para executar /advisor-clear.`
+              });
+              core.setOutput('should_reset', 'false');
+              return;
+            }
+            core.setOutput('should_reset', 'true');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `@${commenter} ✓ Reset autorizado. Disparando reset workflow...`
+            });
+
+  reset:
+    needs: check-clear-command
+    if: needs.check-clear-command.outputs.should_reset == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reset FSM state
+        run: |
+          mkdir -p .mcp/state
+          cat > .mcp/state/current.json << EOF
+          {
+            "state": "draft",
+            "previous_state": "failed",
+            "cleared_at": "$(date -u +%FT%TZ)",
+            "cleared_by": "${{ github.actor }}"
+          }
+          EOF
+          cat .mcp/state/current.json
+
+      - name: Close advisor-block issue
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              labels: ['advisor-cleared']
+            });
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `✓ FSM reset to **draft**. Próximo: \`mcp-builder new\` ou workflow_dispatch para scaffold.yml.`
+            });
+
+      - name: Trigger scaffold workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'scaffold.yml',
+              ref: context.ref,
+              inputs: {
+                project_name: 'example-mcp',
+                sdk: 'python',
+                pattern: 'stateless'
+              }
+            });
+            core.notice('Scaffold workflow dispatched');

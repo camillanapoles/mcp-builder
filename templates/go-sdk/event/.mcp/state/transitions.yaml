@@ -1,0 +1,13 @@
+transitions:
+  - from: idle
+    to: event_received
+    event: event.published
+  - from: event_received
+    to: projected
+    event: handlers.executed
+  - from: projected
+    to: idle
+    event: projection.committed
+  - from: "*"
+    to: failed
+    event: "*.failed"

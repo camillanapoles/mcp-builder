@@ -1,0 +1,98 @@
+/**
+ * EventBus + ProjectionStore — minimal event-driven infrastructure.
+ */
+
+import { randomUUID } from 'node:crypto';
+
+export interface Event {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+}
+
+type EventHandler = (event: Event) => void | Promise<void>;
+
+export class EventBus {
+  private handlers: Map<string, Set<EventHandler>> = new Map();
+  private log: Event[] = [];
+
+  subscribe(eventType: string, handler: EventHandler): () => void {
+    if (!this.handlers.has(eventType)) {
+      this.handlers.set(eventType, new Set());
+    }
+    this.handlers.get(eventType)!.add(handler);
+    return () => this.handlers.get(eventType)?.delete(handler);
+  }
+
+  async publish(event: Omit<Event, 'id' | 'timestamp'> & Partial<Pick<Event, 'id' | 'timestamp'>>): Promise<Event> {
+    const fullEvent: Event = {
+      id: event.id ?? randomUUID(),
+      timestamp: event.timestamp ?? new Date().toISOString(),
+      type: event.type,
+      payload: event.payload,
+    };
+    this.log.push(fullEvent);
+
+    const handlers = this.handlers.get(event.type);
+    if (handlers) {
+      for (const h of handlers) {
+        await h(fullEvent);
+      }
+    }
+
+    // wildcard handlers
+    const wildcard = this.handlers.get('*');
+    if (wildcard) {
+      for (const h of wildcard) {
+        await h(fullEvent);
+      }
+    }
+    return fullEvent;
+  }
+
+  replay(): Event[] {
+    return [...this.log];
+  }
+
+  logSize(): number {
+    return this.log.length;
+  }
+
+  clear(): void {
+    this.log = [];
+    this.handlers.clear();
+  }
+}
+
+export class ProjectionStore {
+  private data: Map<string, Map<string, Record<string, unknown>>> = new Map();
+
+  upsert(collection: string, doc: Record<string, unknown> & { id?: string }): string {
+    if (!this.data.has(collection)) {
+      this.data.set(collection, new Map());
+    }
+    const col = this.data.get(collection)!;
+    const id = (doc.id as string) ?? randomUUID();
+    col.set(id, { ...doc, id });
+    return id;
+  }
+
+  get(collection: string, id: string): Record<string, unknown> | undefined {
+    return this.data.get(collection)?.get(id);
+  }
+
+  list(collection: string): Record<string, unknown>[] {
+    const col = this.data.get(collection);
+    if (!col) return [];
+    return Array.from(col.values());
+  }
+
+  delete(collection: string, id: string): boolean {
+    return this.data.get(collection)?.delete(id) ?? false;
+  }
+
+  clear(): void {
+    this.data.clear();
+  }
+}

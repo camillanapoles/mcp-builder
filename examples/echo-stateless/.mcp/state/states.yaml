@@ -1,0 +1,13 @@
+states:
+  idle:
+    description: "Server running, awaiting tool call"
+    on_enter: []
+  running:
+    description: "Tool currently executing"
+    on_enter: [monitor.collect_metrics]
+  completed:
+    description: "Tool returned successfully"
+    on_enter: [advisor.check_contracts]
+  failed:
+    description: "Tool raised error"
+    on_enter: [advisor.collect_failure, trigger.open_issue]

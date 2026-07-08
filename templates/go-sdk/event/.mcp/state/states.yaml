@@ -1,0 +1,12 @@
+states:
+  idle:
+    description: "Server running, no pending events"
+  event_received:
+    description: "Event received, handlers executing"
+    on_enter: [monitor.collect_metrics]
+  projected:
+    description: "Projection updated, ready for query"
+    on_enter: [advisor.check_contracts]
+  failed:
+    description: "Handler raised error"
+    on_enter: [advisor.collect_failure]

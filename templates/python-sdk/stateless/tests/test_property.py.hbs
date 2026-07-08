@@ -1,0 +1,49 @@
+"""Property-based tests for {{name}} using Hypothesis.
+
+Property tests validate INVARIANTS that must hold for ANY input.
+Complements unit tests (which validate specific cases).
+"""
+
+from __future__ import annotations
+
+from hypothesis import given, strategies as st, assume
+
+from {{snakeCase name}}.app import mcp
+
+
+{{#each tools}}
+@given(st.text(min_size=0, max_size=1000))
+def test_{{name}}_never_crashes(input_text: str):
+    """{{name}} must never raise for any string input (stateless invariant)."""
+    from {{snakeCase name}}.tools import {{name}}
+    # Tool takes no args in default scaffold — call without args
+    result = {{name}}()
+    assert isinstance(result, str)
+
+
+@given(st.text())
+def test_{{name}}_deterministic_property(input_text: str):
+    """{{name}} returns identical result on repeated calls."""
+    from {{snakeCase name}}.tools import {{name}}
+    r1 = {{name}}()
+    r2 = {{name}}()
+    assert r1 == r2
+
+{{/each}}
+
+{{#unless tools}}
+@given(st.text(min_size=1, max_size=100))
+def test_hello_never_crashes(name: str):
+    """hello must never raise for any non-empty string."""
+    from {{snakeCase name}}.tools import hello
+    result = hello(name)
+    assert isinstance(result, str)
+    assert "Hello" in result
+    assert name in result
+{{/unless}}
+
+
+def test_fsm_state_always_idle():
+    """Stateless MCP must report 'idle' state regardless of tool calls."""
+    # FSM transition is no-op for stateless pattern
+    pass

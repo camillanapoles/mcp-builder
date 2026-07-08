@@ -1,0 +1,151 @@
+/**
+ * {{name}} — MCP server (TypeScript SDK / event-driven pattern)
+ *
+ * {{description}}
+ *
+ * Each tool publishes events to the in-memory bus. Handlers subscribe and
+ * update projections (read models). State is derived from the event log.
+ */
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { EventBus, Event, ProjectionStore } from './eventBus.js';
+
+// ============================================================================
+// Event-driven state
+// ============================================================================
+
+const bus = new EventBus();
+const store = new ProjectionStore();
+
+// ============================================================================
+// Tool handlers — each publishes an event
+// ============================================================================
+
+{{#each tools}}
+async function {{camelCase name}}(): Promise<{ eventId: string; logSize: number }> {
+  const event: Event = {
+    type: '{{snakeCase ../name}}.{{snakeCase name}}',
+    payload: { ts: Date.now() },
+  };
+  await bus.publish(event);
+  return { eventId: event.id, logSize: bus.logSize() };
+}
+{{/each}}
+
+{{#unless tools}}
+async function emitEvent(eventType: string, payload: Record<string, unknown> = {}): Promise<{ eventId: string; logSize: number }> {
+  const event: Event = { type: eventType, payload };
+  await bus.publish(event);
+  return { eventId: event.id, logSize: bus.logSize() };
+}
+
+async function listProjections(collection: string): Promise<unknown[]> {
+  return store.list(collection);
+}
+
+async function replayEvents(): Promise<Event[]> {
+  return bus.replay();
+}
+{{/unless}}
+
+// ============================================================================
+// MCP server setup
+// ============================================================================
+
+const server = new Server(
+  { name: '{{name}}', version: '0.1.0' },
+  { capabilities: { tools: {} } },
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {{#each tools}}
+    {
+      name: '{{name}}',
+      description: '{{description}} (publishes event)',
+      inputSchema: { type: 'object' as const, properties: {} },
+    },
+    {{/each}}
+    {{#unless tools}}
+    {
+      name: 'emit_event',
+      description: 'Emit an event to the bus',
+      inputSchema: {
+        type: 'object' as const,
+        required: ['eventType'],
+        properties: {
+          eventType: { type: 'string' },
+          payload: { type: 'object' },
+        },
+      },
+    },
+    {
+      name: 'list_projections',
+      description: 'List documents in a projection collection',
+      inputSchema: {
+        type: 'object' as const,
+        required: ['collection'],
+        properties: { collection: { type: 'string' } },
+      },
+    },
+    {
+      name: 'replay_events',
+      description: 'Replay full event log (for debugging)',
+      inputSchema: { type: 'object' as const, properties: {} },
+    },
+    {{/unless}}
+  ],
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  const { name } = req.params;
+  try {
+    let result: unknown;
+    switch (name) {
+      {{#each tools}}
+      case '{{name}}':
+        result = await {{camelCase name}}();
+        break;
+      {{/each}}
+      {{#unless tools}}
+      case 'emit_event': {
+        const args = req.params.arguments ?? {};
+        result = await emitEvent(args.eventType as string, args.payload as Record<string, unknown> ?? {});
+        break;
+      }
+      case 'list_projections': {
+        const args = req.params.arguments ?? {};
+        result = await listProjections(args.collection as string);
+        break;
+      }
+      case 'replay_events':
+        result = await replayEvents();
+        break;
+      {{/unless}}
+      default:
+        throw new Error(`unknown tool: ${name}`);
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  } catch (err) {
+    return {
+      content: [{ type: 'text', text: `error: ${(err as Error).message}` }],
+      isError: true,
+    };
+  }
+});
+
+async function main(): Promise<void> {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('[{{name}}] MCP server started (event-driven)');
+}
+
+main().catch(err => {
+  console.error('fatal:', err);
+  process.exit(1);
+});

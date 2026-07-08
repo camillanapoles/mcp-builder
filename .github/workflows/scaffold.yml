@@ -1,0 +1,157 @@
+# Scaffold workflow — materializa transição draft → scaffolded
+#
+# Quando invocado: após `mcp-builder new` gerar código em branch scaffold/*
+# Valida estrutura gerada, roda gate hooks, faz commit para main se tudo OK.
+
+name: Scaffold
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Nome do projeto gerado"
+        required: true
+        type: string
+      sdk:
+        description: "SDK target"
+        required: true
+        type: choice
+        options: [python, typescript, go, rust]
+      pattern:
+        description: "Architectural pattern"
+        required: true
+        type: choice
+        options: [stateless, event, factory]
+  pull_request:
+    branches: [main]
+    paths:
+      - "examples/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: scaffold-${{ github.event.inputs.project_name || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    outputs:
+      project_path: ${{ steps.gen.outputs.project-path }}
+      files_count: ${{ steps.gen.outputs.files-count }}
+      state: ${{ steps.fsm-transition.outputs.state }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: builder/package-lock.json
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install builder
+        working-directory: builder
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Generate project (CLI mode)
+        id: gen
+        working-directory: builder
+        run: |
+          PROJECT="${{ inputs.project_name || 'example-mcp' }}"
+          SDK="${{ inputs.sdk || 'python' }}"
+          PATTERN="${{ inputs.pattern || 'stateless' }}"
+          node dist/cli/index.js new "$PROJECT" \
+            --sdk "$SDK" \
+            --pattern "$PATTERN" \
+            --output ../examples
+
+          PROJECT_PATH="../examples/$PROJECT"
+          echo "project-path=$PROJECT_PATH" >> $GITHUB_OUTPUT
+          echo "files-count=$(find $PROJECT_PATH -type f | wc -l)" >> $GITHUB_OUTPUT
+
+      - name: Run gate hooks (validate structure)
+        id: gate
+        run: |
+          # gate hook: validates generated project has expected files
+          PROJECT_PATH="${{ steps.gen.outputs.project-path }}"
+          if [ ! -f "$PROJECT_PATH/README.md" ]; then
+            echo "::error::README.md missing"
+            exit 1
+          fi
+          if [ ! -d "$PROJECT_PATH/.mcp/state" ]; then
+            echo "::error::.mcp/state/ missing"
+            exit 1
+          fi
+          echo "gate=passed" >> $GITHUB_OUTPUT
+
+      - name: Run advisor hooks (compliance)
+        id: advisor
+        run: |
+          PROJECT_PATH="${{ steps.gen.outputs.project-path }}"
+          # advisor: no TODOs/FIXMEs in generated code (warning only at scaffold)
+          TODOS=$(grep -rE '\b(TODO|FIXME)\b' "$PROJECT_PATH" --include='*.py' --include='*.ts' --include='*.go' --include='*.rs' | wc -l || echo 0)
+          echo "todo_count=$TODOS" >> $GITHUB_OUTPUT
+          if [ "$TODOS" -gt 5 ]; then
+            echo "::warning::too many TODOs ($TODOS) — review needed"
+          fi
+
+      - name: Upload scaffold artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scaffold-${{ inputs.project_name || 'example' }}
+          path: ${{ steps.gen.outputs.project-path }}
+          retention-days: 30
+
+      - name: Compute FSM transition
+        id: fsm-transition
+        run: |
+          echo "state=scaffolded" >> $GITHUB_OUTPUT
+          echo "event=scaffold.complete" >> $GITHUB_OUTPUT
+
+      - name: Trigger next workflow (test.yml)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'test.yml',
+              ref: context.ref,
+              inputs: {
+                project_name: '${{ inputs.project_name || 'example-mcp' }}',
+                scaffold_run_id: '${{ github.run_id }}'
+              }
+            });
+
+  on-failure:
+    needs: scaffold
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger advisor-block workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'advisor-block.yml',
+              ref: context.ref,
+              inputs: {
+                failed_workflow: 'scaffold',
+                run_id: '${{ github.run_id }}',
+                reason: 'scaffold.failed'
+              }
+            });

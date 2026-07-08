@@ -1,0 +1,114 @@
+//! {{name}} — event-driven MCP server in Rust.
+//! {{description}}
+
+use rmcp::{
+    ServerHandler, model::*,
+    service::{RequestContext, serve_server},
+};
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use tokio::io::{stdin, stdout};
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct Event {
+    id: String,
+    event_type: String,
+    payload: HashMap<String, serde_json::Value>,
+    timestamp: String,
+}
+
+#[derive(Default)]
+struct EventBus { log: Vec<Event> }
+
+impl EventBus {
+    fn publish(&mut self, event_type: &str) -> Event {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let event = Event {
+            id: format!("{:032x}", nanos),
+            event_type: event_type.to_string(),
+            payload: HashMap::new(),
+            timestamp: format!("{}", nanos),
+        };
+        self.log.push(event.clone());
+        event
+    }
+    fn log_size(&self) -> usize { self.log.len() }
+}
+
+#[derive(Clone)]
+struct {{pascalCase name}}Server { bus: Arc<Mutex<EventBus>> }
+
+impl ServerHandler for {{pascalCase name}}Server {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            server_info: Implementation { name: "{{name}}".into(), version: "0.1.0".into() },
+            capabilities: ServerCapabilities {
+                tools: Some(ToolsCapability { list_changed: None }),
+                ..Default::default()
+            },
+            instructions: Some("{{description}}".into()),
+            ..Default::default()
+        }
+    }
+
+    async fn list_tools(&self, _req: Option<PaginatedRequestParam>, _ctx: RequestContext<Arc<Self>>) -> std::result::Result<ListToolsResult, McpError> {
+        Ok(ListToolsResult {
+            tools: vec![
+                {{#each tools}}
+                Tool {
+                    name: "{{name}}".into(),
+                    description: Some("{{description}}".into()),
+                    input_schema: Schema::default(),
+                    annotations: None,
+                },
+                {{/each}}
+                {{#unless tools}}
+                Tool {
+                    name: "emit_event".into(),
+                    description: Some("Emit an event".into()),
+                    input_schema: Schema {
+                        schema: serde_json::json!({"type":"object","properties":{"event_type":{"type":"string"}},"required":["event_type"]}),
+                    },
+                    annotations: None,
+                },
+                {{/unless}}
+            ],
+            next_cursor: None,
+        })
+    }
+
+    async fn call_tool(&self, req: CallToolRequestParam, _ctx: RequestContext<Arc<Self>>) -> std::result::Result<CallToolResult, McpError> {
+        let mut bus = self.bus.lock().unwrap();
+        let result = match req.name.as_str() {
+            {{#each tools}}
+            "{{name}}" => {
+                let event = bus.publish("{{snakeCase ../name}}.{{snakeCase name}}");
+                format!("emitted, id: {}", event.id)
+            }
+            {{/each}}
+            {{#unless tools}}
+            "emit_event" => {
+                let event_type = req.arguments.and_then(|a| a.get("event_type")).and_then(|v| v.as_str()).unwrap_or("anonymous.event");
+                let event = bus.publish(event_type);
+                format!("emitted, id: {}", event.id)
+            }
+            {{/unless}}
+            _ => return Err(McpError::invalid_request("unknown tool", None)),
+        };
+        Ok(CallToolResult {
+            content: vec![Content::text(result)],
+            structured_content: None,
+            is_error: None,
+        })
+    }
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    eprintln!("[{{name}}] MCP server starting (event-driven, stdio)");
+    let server = {{pascalCase name}}Server { bus: Arc::new(Mutex::new(EventBus::default())) };
+    let transport = (stdin(), stdout());
+    serve_server(server, transport).await?;
+    Ok(())
+}

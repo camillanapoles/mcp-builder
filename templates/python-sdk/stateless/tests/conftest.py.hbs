@@ -1,0 +1,38 @@
+"""Pytest fixtures for {{name}} tests."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+# Ensure src/ is on path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+
+@pytest.fixture
+def mcp_app():
+    """Import the FastMCP app instance."""
+    from {{snakeCase name}}.app import mcp
+    return mcp
+
+
+@pytest.fixture
+def spec():
+    """Return the MCPSpec used to generate this project."""
+    return {
+        "name": "{{name}}",
+        "description": "{{description}}",
+        "sdk": "python",
+        "pattern": "stateless",
+        "tools": [
+            {{#each tools}}
+            {
+                "name": "{{name}}",
+                "description": "{{description}}",
+                "inputSchema": {{{json inputSchema}}}
+            }{{#unless @last}},{{/unless}}
+            {{/each}}
+        ],
+    }

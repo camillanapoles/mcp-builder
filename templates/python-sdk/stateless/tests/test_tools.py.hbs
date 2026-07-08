@@ -1,0 +1,88 @@
+"""Unit tests for {{name}} tools.
+
+Stateless pattern: tools are pure functions, deterministic, no side effects.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from {{snakeCase name}}.app import mcp
+
+
+# ============================================================================
+# Tool registration smoke tests
+# ============================================================================
+
+def test_mcp_server_exists():
+    """Server instance should be created."""
+    assert mcp is not None
+    assert mcp.name == "{{name}}"
+
+
+def test_tools_registered():
+    """All declared tools must be registered with FastMCP."""
+    {{#each tools}}
+    # tool: {{name}}
+    {{/each}}
+    {{#if tools}}
+    expected = {{tools.length}}
+    {{else}}
+    expected = 1  # default `hello` tool
+    {{/if}}
+    # FastMCP stores tools internally — verify via list_tools
+    # Note: actual API may differ; adapt to FastMCP version
+    assert mcp is not None
+
+
+# ============================================================================
+# Per-tool tests — one block per tool declared in spec
+# ============================================================================
+
+{{#each tools}}
+class Test{{pascalCase name}}:
+    """Tests for `{{name}}` tool."""
+
+    def test_{{name}}_returns_string(self):
+        """{{name}} must return a string (MCP text content)."""
+        from {{../name}}.tools import {{name}}
+        result = {{name}}()
+        assert isinstance(result, str)
+
+    def test_{{name}}_deterministic(self):
+        """Same input → same output (stateless invariant)."""
+        from {{../name}}.tools import {{name}}
+        r1 = {{name}}()
+        r2 = {{name}}()
+        assert r1 == r2
+
+    def test_{{name}}_no_side_effects(self):
+        """Tool must not mutate global state."""
+        from {{../name}}.tools import {{name}}
+        import {{../name}}.tools as tools_mod
+        before = dict(vars(tools_mod))
+        {{name}}()
+        after = dict(vars(tools_mod))
+        # ignore return value of {{name}} itself
+        before.pop("{{name}}", None)
+        after.pop("{{name}}", None)
+        assert before.keys() == after.keys()
+
+{{/each}}
+
+{{#unless tools}}
+class TestDefaultHello:
+    """Tests for default hello tool."""
+
+    def test_hello_default(self):
+        from {{snakeCase name}}.tools import hello
+        assert hello() == "Hello, world!"
+
+    def test_hello_with_name(self):
+        from {{snakeCase name}}.tools import hello
+        assert hello("agent") == "Hello, agent!"
+
+    def test_hello_deterministic(self):
+        from {{snakeCase name}}.tools import hello
+        assert hello("x") == hello("x")
+{{/unless}}

@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mutmut-cache/
+.stryker-tmp/
+target/
+dist/
+build/
+*.egg-info/
+.coverage
+coverage.xml
+htmlcov/
+coverage.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.log
+
+# Build artifacts
+*.tsbuildinfo
+.eslintcache
+
+# OS
+Thumbs.db
+
+# Project state (mantemos .mcp/state/*.yaml versionados, mas ignoramos runtime state)
+.mcp/state/current.json
+.mcp/state/.cache/

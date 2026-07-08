@@ -1,0 +1,90 @@
+/**
+ * {{name}} — MCP server (TypeScript SDK / factory pattern)
+ * {{description}}
+ */
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+import { Registry, Factory } from './registry.js';
+
+{{#each tools}}
+class {{pascalCase name}}Model {
+  constructor(public readonly id: string, public readonly createdAt: string) {}
+}
+
+class {{pascalCase name}}Factory extends Factory<{{pascalCase name}}Model> {
+  typeName = '{{name}}';
+  create(): {{pascalCase name}}Model {
+    const obj = new {{pascalCase name}}Model(randomUUID(), new Date().toISOString());
+    this.registry.register(this.typeName, obj.id, obj);
+    return obj;
+  }
+}
+
+const {{camelCase name}}Factory = new {{pascalCase name}}Factory();
+{{/each}}
+
+{{#unless tools}}
+class DefaultModel {
+  constructor(public readonly id: string, public readonly name: string, public readonly createdAt: string) {}
+}
+
+class DefaultFactory extends Factory<DefaultModel> {
+  typeName = 'default';
+  create(name: string = 'unnamed'): DefaultModel {
+    const obj = new DefaultModel(randomUUID(), name, new Date().toISOString());
+    this.registry.register(this.typeName, obj.id, obj);
+    return obj;
+  }
+}
+
+const defaultFactory = new DefaultFactory();
+{{/unless}}
+
+const server = new Server(
+  { name: '{{name}}', version: '0.1.0' },
+  { capabilities: { tools: {} } },
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {{#each tools}}
+    { name: 'create_{{name}}', description: 'Create a {{name}} object. {{description}}', inputSchema: { type: 'object' as const, properties: {} } },
+    { name: 'list_{{name}}', description: 'List all {{name}} objects', inputSchema: { type: 'object' as const, properties: {} } },
+    {{/each}}
+    {{#unless tools}}
+    { name: 'create_default', description: 'Create a default object', inputSchema: { type: 'object' as const, properties: { name: { type: 'string' } } } },
+    { name: 'list_defaults', description: 'List all default objects', inputSchema: { type: 'object' as const, properties: {} } },
+    {{/unless}}
+  ],
+}));
+
+server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  const { name, arguments: args } = req.params;
+  try {
+    let result: unknown;
+    switch (name) {
+      {{#each tools}}
+      case 'create_{{name}}': result = {{camelCase name}}Factory.create(); break;
+      case 'list_{{name}}': result = {{camelCase name}}Factory.list(); break;
+      {{/each}}
+      {{#unless tools}}
+      case 'create_default': result = defaultFactory.create(args?.name as string); break;
+      case 'list_defaults': result = defaultFactory.list(); break;
+      {{/unless}}
+      default: throw new Error(`unknown tool: ${name}`);
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  } catch (err) {
+    return { content: [{ type: 'text', text: `error: ${(err as Error).message}` }], isError: true };
+  }
+});
+
+async function main(): Promise<void> {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('[{{name}}] MCP server started (factory pattern)');
+}
+
+main().catch(err => { console.error('fatal:', err); process.exit(1); });

@@ -1,0 +1,24 @@
+package tools
+
+// Tools package — pure functions for {{name}}.
+// Each function is stateless: same input always produces same output.
+
+{{#each tools}}
+// {{pascalCase name}} implements the {{name}} tool.
+// {{description}}
+func {{pascalCase name}}(input string) string {
+	// TODO: implement business logic
+	return "{{name}} executed: " + input
+}
+
+{{/each}}
+
+{{#unless tools}}
+// Hello is the default greeting tool.
+func Hello(name string) string {
+	if name == "" {
+		name = "world"
+	}
+	return "Hello, " + name + "!"
+}
+{{/unless}}

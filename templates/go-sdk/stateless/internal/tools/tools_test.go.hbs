@@ -1,0 +1,44 @@
+package tools
+
+import (
+	"testing"
+)
+
+{{#each tools}}
+func Test{{pascalCase name}}(t *testing.T) {
+	got := {{pascalCase name}}("test")
+	if got == "" {
+		t.Error("expected non-empty result")
+	}
+}
+
+func Test{{pascalCase name}}Deterministic(t *testing.T) {
+	r1 := {{pascalCase name}}("x")
+	r2 := {{pascalCase name}}("x")
+	if r1 != r2 {
+		t.Errorf("non-deterministic: %q vs %q", r1, r2)
+	}
+}
+{{/each}}
+
+{{#unless tools}}
+func TestHelloDefault(t *testing.T) {
+	got := Hello("")
+	if got != "Hello, world!" {
+		t.Errorf("expected 'Hello, world!', got %q", got)
+	}
+}
+
+func TestHelloWithName(t *testing.T) {
+	got := Hello("agent")
+	if got != "Hello, agent!" {
+		t.Errorf("expected 'Hello, agent!', got %q", got)
+	}
+}
+
+func TestHelloDeterministic(t *testing.T) {
+	if Hello("x") != Hello("x") {
+		t.Error("non-deterministic")
+	}
+}
+{{/unless}}

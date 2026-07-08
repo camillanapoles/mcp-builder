@@ -1,0 +1,25 @@
+transitions:
+  - from: idle
+    to: running
+    event: tool.invoke
+    action_workflow: ci.yml
+  - from: running
+    to: completed
+    event: tool.success
+    action_workflow: ci.yml
+  - from: running
+    to: failed
+    event: tool.error
+    action_workflow: ci.yml
+  - from: completed
+    to: idle
+    event: tool.returned
+    action_workflow: ci.yml
+  - from: failed
+    to: idle
+    event: advisor.cleared
+    action_workflow: ci.yml
+  - from: "*"
+    to: failed
+    event: "*.failed"
+    action_workflow: ci.yml

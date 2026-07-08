@@ -1,0 +1,84 @@
+// {{name}} — event-driven MCP server in Go.
+// {{description}}
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+)
+
+type Event struct {
+	Type      string                 `json:"type"`
+	Payload   map[string]interface{} `json:"payload"`
+	Timestamp time.Time              `json:"timestamp"`
+}
+
+type EventHandler func(event Event)
+
+type EventBus struct {
+	mu       sync.RWMutex
+	handlers map[string][]EventHandler
+	log      []Event
+}
+
+func NewEventBus() *EventBus {
+	return &EventBus{handlers: make(map[string][]EventHandler)}
+}
+
+func (b *EventBus) Subscribe(eventType string, handler EventHandler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.handlers[eventType] = append(b.handlers[eventType], handler)
+}
+
+func (b *EventBus) Publish(event Event) {
+	b.mu.Lock()
+	b.log = append(b.log, event)
+	handlers := b.handlers[event.Type]
+	b.mu.Unlock()
+	for _, h := range handlers { h(event) }
+}
+
+func (b *EventBus) LogSize() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.log)
+}
+
+var bus = NewEventBus()
+
+func main() {
+	s := server.NewMCPServer("{{name}}", "0.1.0", server.WithToolCapabilities(true))
+
+	{{#each tools}}
+	s.AddTool(
+		mcp.NewTool("{{name}}", mcp.WithDescription("{{description}}")),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			bus.Publish(Event{Type: "{{snakeCase ../name}}.{{snakeCase name}}", Timestamp: time.Now()})
+			return mcp.NewToolResultText(fmt.Sprintf("emitted, log size: %d", bus.LogSize())), nil
+		},
+	)
+	{{/each}}
+
+	{{#unless tools}}
+	s.AddTool(
+		mcp.NewTool("emit_event", mcp.WithDescription("Emit an event"),
+			mcp.WithString("event_type", mcp.Description("Event type"))),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			eventType, _ := req.Params.Arguments["event_type"].(string)
+			if eventType == "" { eventType = "anonymous.event" }
+			bus.Publish(Event{Type: eventType, Timestamp: time.Now()})
+			return mcp.NewToolResultText(fmt.Sprintf("emitted, log size: %d", bus.LogSize())), nil
+		},
+	)
+	{{/unless}}
+
+	log.Println("[{{name}}] MCP server starting (event-driven, stdio)")
+	if err := server.ServeStdio(s); err != nil { log.Fatalf("server error: %v", err) }
+}

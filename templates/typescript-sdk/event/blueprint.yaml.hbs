@@ -1,0 +1,81 @@
+name: {{name}}-blueprint
+# Blueprint de ambiente para {{name}} — MCP server (typescript / event)
+# Adapta a metodologia declarativa estilo Devin, sem usar Devin.
+
+initialize:
+  - name: Install Node.js 20
+    uses: github.com/actions/setup-node@v4
+    with:
+      node-version: "20"
+      cache: "npm"
+      cache-dependency-path: package.json
+
+  - name: Install pnpm (opcional)
+    run: npm install -g pnpm
+
+maintenance:
+  - name: Install dependencies
+    run: npm install
+
+  - name: Build
+    run: npm run build
+
+  - name: Verify build
+    run: |
+      test -f dist/index.js
+      node -e "console.log('OK')"
+
+knowledge:
+  - name: lint
+    contents: |
+      npm run lint
+
+  - name: typecheck
+    contents: |
+      npm run typecheck
+
+  - name: test
+    contents: |
+      Run all tests:
+      npm test
+
+      Run with coverage:
+      npm run test:coverage
+
+      Run property tests:
+      npm run test:property
+
+  - name: build
+    contents: |
+      npm run build
+
+      Output: dist/
+
+  - name: run-server
+    contents: |
+      Run the MCP server (stdio):
+      npm start
+
+      Test with JSON-RPC via stdin:
+      echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | npm start
+
+  - name: mutation
+    contents: |
+      Run mutation testing:
+      npm run test:mutation
+
+clone:
+  path: {{name}}
+  ref: main
+  depth: 0
+  tags: true
+  submodules: recursive
+  lfs: false
+
+env:
+  NODE_ENV: development
+  MCP_PATTERN: event
+  MCP_SDK: typescript
+
+secrets:
+  - NPM_TOKEN

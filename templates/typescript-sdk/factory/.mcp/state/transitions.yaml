@@ -1,0 +1,16 @@
+transitions:
+  - from: idle
+    to: creating
+    event: factory.invoke
+  - from: creating
+    to: registered
+    event: validation.passed
+  - from: creating
+    to: failed
+    event: validation.failed
+  - from: registered
+    to: idle
+    event: object.returned
+  - from: "*"
+    to: failed
+    event: "*.failed"

@@ -1,0 +1,9 @@
+states:
+  idle:
+    description: "Server running, awaiting tool call"
+  running:
+    description: "Tool executing"
+  completed:
+    description: "Tool returned successfully"
+  failed:
+    description: "Tool raised error"

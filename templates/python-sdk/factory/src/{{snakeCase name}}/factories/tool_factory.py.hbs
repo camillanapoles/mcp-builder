@@ -1,0 +1,143 @@
+"""Tool factory for {{name}}.
+
+The factory takes a list of tool specs + a ``Resources`` object and produces
+callable tool functions. Each produced function:
+
+1. Validates its arguments against the spec's input schema (call-time check).
+2. Closes over the shared ``Resources`` (DB pool, HTTP client, etc.).
+3. Returns a deterministic string (the LLM contract).
+
+The factory itself is a pure function of its inputs: same specs + same
+resources → same tools. This makes it trivially testable.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+
+from {{snakeCase name}}.validators import validate
+
+
+# ----------------------------------------------------------------------------
+# Resources — closed over by every built tool.
+# ----------------------------------------------------------------------------
+@dataclass
+class Resources:
+    """Shared, immutable-after-startup resources.
+
+    Subclass this or pass concrete instances in production. Tests pass a fake
+    (e.g. an in-memory dict for ``kv_store``).
+    """
+
+    config: dict[str, Any] = field(default_factory=dict)
+    kv_store: dict[str, Any] = field(default_factory=dict)
+    # Add real resources here: db_pool, http_client, ...
+
+
+# ----------------------------------------------------------------------------
+# Spec — minimal tool spec used by the factory.
+# ----------------------------------------------------------------------------
+@dataclass
+class ToolSpec:
+    """Tool spec: name, description, input schema (JSON Schema).
+
+    The ``input_schema`` is a plain dict mirroring the JSON Schema of the
+    tool's arguments. Properties and required keys are extracted from the
+    spec at scaffolding time.
+    """
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+
+
+# ----------------------------------------------------------------------------
+# Factory
+# ----------------------------------------------------------------------------
+class ToolFactory:
+    """Builds tool functions from specs + resources.
+
+    The factory is stateless: ``build()`` is a pure function of its inputs.
+    """
+
+    def __init__(self, resources: Resources) -> None:
+        self.resources = resources
+
+    def build(self, specs: list[ToolSpec]) -> dict[str, Callable[..., str]]:
+        """Return a dict of ``name → tool_fn`` built from ``specs``."""
+        built: dict[str, Callable[..., str]] = {}
+        for spec in specs:
+            built[spec.name] = self._build_one(spec)
+        return built
+
+    def _build_one(self, spec: ToolSpec) -> Callable[..., str]:
+        """Build a single tool function.
+
+        The returned function:
+        - accepts **kwargs (typed at the FastMCP layer via decorators);
+        - validates against ``spec.input_schema``;
+        - closes over ``self.resources``;
+        - returns a deterministic string.
+        """
+        resources = self.resources
+        schema = spec.input_schema
+        tool_name = spec.name
+
+        def tool_fn(**kwargs: Any) -> str:
+            # 1. Validate input against the schema.
+            errors = validate(schema, kwargs)
+            if errors:
+                raise ValueError(
+                    f"{tool_name}: invalid args ({len(errors)} errors): {errors}"
+                )
+            # 2. Execute business logic with shared resources.
+            #    Replace this stub with real logic.
+            return (
+                f"{tool_name} executed with {kwargs!r} "
+                f"(config_keys={list(resources.config.keys())})"
+            )
+
+        # Carry metadata for FastMCP registration + docs.
+        tool_fn.__name__ = tool_name
+        tool_fn.__doc__ = spec.description
+        return tool_fn
+
+
+# ----------------------------------------------------------------------------
+# Convenience: build the registry from the project's spec.
+# ----------------------------------------------------------------------------
+def build_default() -> dict[str, Callable[..., str]]:
+    """Build all tools declared in the spec, with default (empty) resources."""
+    specs: list[ToolSpec] = [
+{{#each tools}}
+        ToolSpec(
+            name="{{snakeCase name}}",
+            description=(
+                "{{description}}"
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+{{#each inputSchema.properties}}
+                    "{{@key}}": {
+                        "type": "{{this.type}}",
+{{#if this.description}}                        "description": "{{this.description}}",
+{{/if}}
+                    },
+{{/each}}
+                },
+                "required": [
+{{#each inputSchema.required}}                    "{{this}}",
+{{/each}}
+                ],
+            },
+        ),
+{{/each}}
+    ]
+    factory = ToolFactory(Resources())
+    return factory.build(specs)
+
+
+__all__ = ["Resources", "ToolSpec", "ToolFactory", "build_default"]

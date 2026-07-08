@@ -1,0 +1,110 @@
+name: {{name}}-blueprint
+# Blueprint de ambiente para {{name}} — MCP server (Python / event)
+# Adapta a metodologia declarativa estilo Devin, sem usar Devin.
+# Este arquivo descreve COMO configurar o ambiente de dev/CI do MCP gerado.
+
+# ============================================================================
+# initialize — roda uma vez por build (instala runtimes e ferramentas globais)
+# ============================================================================
+initialize:
+  - name: Install Python 3.12
+    uses: github.com/actions/setup-python@v5
+    with:
+      python-version: "3.12"
+      cache: "pip"
+      cache-dependency-path: pyproject.toml
+
+  - name: Install uv (fast Python package manager)
+    run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# ============================================================================
+# maintenance — roda a cada build (instala deps do projeto, surfaced ao agente)
+# ============================================================================
+maintenance:
+  - name: Install project dependencies
+    run: |
+      pip install -e ".[dev]"
+
+  - name: Verify install
+    run: |
+      python -c "import {{snakeCase name}}; print('OK, version:', {{snakeCase name}}.__version__)"
+
+# ============================================================================
+# knowledge — referência NÃO executada, surfaced ao agente em cada sessão
+# ============================================================================
+knowledge:
+  - name: lint
+    contents: |
+      Run linting:
+      ruff check src tests
+
+      Auto-fix:
+      ruff check --fix src tests
+
+  - name: typecheck
+    contents: |
+      Run type checking:
+      mypy src
+
+  - name: test
+    contents: |
+      Run all tests:
+      pytest -v --cov={{snakeCase name}} --cov-report=term-missing --cov-fail-under=80
+
+      Run only unit tests:
+      pytest tests/test_tools.py -v
+
+      Run only property tests:
+      pytest tests/test_property.py -v
+
+      Run only contract tests:
+      pytest tests/test_contract.py -v
+
+  - name: build
+    contents: |
+      Build package:
+      python -m build
+
+      Output: dist/
+
+  - name: run-server
+    contents: |
+      Run the MCP server (stdio):
+      python -m {{snakeCase name}}.server
+
+      Test with JSON-RPC via stdin:
+      echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python -m {{snakeCase name}}.server
+
+  - name: mutation
+    contents: |
+      Run mutation testing:
+      mutmut run --only-mutated-changed
+
+      View results:
+      mutmut results
+
+# ============================================================================
+# clone — override de git clone defaults (repo-level only)
+# ============================================================================
+clone:
+  path: {{name}}
+  ref: main
+  depth: 0          # full history for proper versioning
+  tags: true
+  submodules: recursive
+  lfs: false
+
+# ============================================================================
+# env — variáveis globais do blueprint
+# ============================================================================
+env:
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+  MCP_PATTERN: event
+  MCP_SDK: python
+
+# ============================================================================
+# secrets — nomes de secrets esperados (injetados via GitHub Actions secrets)
+# ============================================================================
+secrets:
+  - PYPI_TOKEN        # para publicar no PyPI no release workflow

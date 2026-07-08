@@ -1,0 +1,81 @@
+/**
+ * Tests for {{name}} event-driven MCP server.
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { EventBus, ProjectionStore } from '../src/eventBus.js';
+
+describe('EventBus', () => {
+  let bus: EventBus;
+
+  beforeEach(() => {
+    bus = new EventBus();
+  });
+
+  it('publishes event and increments log size', async () => {
+    await bus.publish({ type: 'test.event', payload: { x: 1 } });
+    expect(bus.logSize()).toBe(1);
+  });
+
+  it('calls subscribed handlers', async () => {
+    const calls: string[] = [];
+    bus.subscribe('test.event', e => calls.push(e.type));
+    await bus.publish({ type: 'test.event', payload: {} });
+    expect(calls).toEqual(['test.event']);
+  });
+
+  it('wildcard handlers receive all events', async () => {
+    const seen: string[] = [];
+    bus.subscribe('*', e => seen.push(e.type));
+    await bus.publish({ type: 'a.event', payload: {} });
+    await bus.publish({ type: 'b.event', payload: {} });
+    expect(seen).toEqual(['a.event', 'b.event']);
+  });
+
+  it('replay returns full log', async () => {
+    await bus.publish({ type: 'a', payload: {} });
+    await bus.publish({ type: 'b', payload: {} });
+    const log = bus.replay();
+    expect(log).toHaveLength(2);
+    expect(log[0].type).toBe('a');
+    expect(log[1].type).toBe('b');
+  });
+
+  it('auto-generates id and timestamp', async () => {
+    const event = await bus.publish({ type: 'test', payload: {} });
+    expect(event.id).toBeDefined();
+    expect(event.timestamp).toBeDefined();
+  });
+});
+
+describe('ProjectionStore', () => {
+  let store: ProjectionStore;
+
+  beforeEach(() => {
+    store = new ProjectionStore();
+  });
+
+  it('upserts and lists documents', () => {
+    store.upsert('users', { name: 'Alice' });
+    store.upsert('users', { name: 'Bob' });
+    const users = store.list('users');
+    expect(users).toHaveLength(2);
+  });
+
+  it('updates existing document by id', () => {
+    const id = store.upsert('users', { name: 'Alice' });
+    store.upsert('users', { id, name: 'Alice Updated' });
+    const doc = store.get('users', id);
+    expect(doc?.name).toBe('Alice Updated');
+  });
+
+  it('deletes document', () => {
+    const id = store.upsert('users', { name: 'Alice' });
+    expect(store.delete('users', id)).toBe(true);
+    expect(store.get('users', id)).toBeUndefined();
+  });
+
+  it('returns empty array for unknown collection', () => {
+    expect(store.list('unknown')).toEqual([]);
+  });
+});

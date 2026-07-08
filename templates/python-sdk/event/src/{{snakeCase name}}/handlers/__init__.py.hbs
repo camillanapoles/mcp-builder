@@ -1,0 +1,25 @@
+"""Event handlers for {{name}}.
+
+Each handler subscribes to an event type and updates projections.
+"""
+
+from __future__ import annotations
+
+from ..events import Event, bus
+from ..state.projections import store
+
+
+def handle_{{snakeCase name}}_created(event: Event) -> None:
+    """Update projection when {{name}} is created."""
+    store.upsert("{{snakeCase name}}s", event.payload)
+
+
+def handle_{{snakeCase name}}_updated(event: Event) -> None:
+    """Update projection when {{name}} is updated."""
+    store.upsert("{{snakeCase name}}s", event.payload)
+
+
+def register_handlers() -> None:
+    """Wire all handlers to the event bus."""
+    bus.subscribe("{{snakeCase name}}.created", handle_{{snakeCase name}}_created)
+    bus.subscribe("{{snakeCase name}}.updated", handle_{{snakeCase name}}_updated)

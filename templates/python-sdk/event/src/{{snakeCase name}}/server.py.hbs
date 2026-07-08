@@ -1,0 +1,68 @@
+"""{{name}} — event-driven MCP server."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+
+from .events import Event, bus
+from .handlers import register_handlers
+from .state.projections import store
+
+logger = logging.getLogger("{{name}}")
+
+mcp = FastMCP("{{name}}")
+
+# Wire handlers
+register_handlers()
+
+
+{{#each tools}}
+@mcp.tool()
+async def {{name}}() -> dict[str, Any]:
+    """{{description}}
+
+    Publishes event '{{snakeCase ../name}}.created' and returns projected state.
+    """
+    event = Event(
+        type="{{snakeCase ../name}}.created",
+        payload={"tool": "{{name}}", "ts": asyncio.get_event_loop().time()},
+    )
+    await bus.publish(event)
+    return {"event_id": id(event), "log_size": len(bus.replay())}
+
+{{/each}}
+
+{{#unless tools}}
+@mcp.tool()
+async def emit_event(event_type: str, payload: dict = None) -> dict[str, Any]:
+    """Emit an event to the bus."""
+    event = Event(type=event_type, payload=payload or {})
+    await bus.publish(event)
+    return {"emitted": event_type, "log_size": len(bus.replay())}
+
+
+@mcp.tool()
+async def list_projections(collection: str) -> list[dict[str, Any]]:
+    """List documents in a projection collection."""
+    return store.list(collection)
+
+
+@mcp.tool()
+async def replay_events() -> list[dict[str, Any]]:
+    """Replay full event log (for debugging)."""
+    return [e.model_dump(mode="json") for e in bus.replay()]
+{{/unless}}
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    logger.info("starting {{name}} MCP server (event-driven)")
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()

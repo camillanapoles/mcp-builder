@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "{{name}}": {
+      "command": "python",
+      "args": ["-m", "{{snakeCase name}}.server"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

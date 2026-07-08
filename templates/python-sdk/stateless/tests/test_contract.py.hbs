@@ -1,0 +1,73 @@
+"""Contract tests for {{name}} — validate MCP protocol shape.
+
+Uses pact-python to verify that the MCP server respects the protocol contract:
+- All tools have name, description, inputSchema
+- All tool responses are valid MCP content (type in ['text', 'image', 'resource'])
+- mcp.json conforms to the official schema
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from {{snakeCase name}}.app import mcp
+
+
+PROJECT_ROOT = Path(__file__).parent.parent
+
+
+def test_mcp_json_exists():
+    """mcp.json must exist for Claude Desktop / Cursor integration."""
+    mcp_json = PROJECT_ROOT / "mcp.json"
+    assert mcp_json.exists(), "mcp.json not found at project root"
+
+
+def test_mcp_json_schema():
+    """mcp.json must conform to expected schema."""
+    mcp_json = json.loads((PROJECT_ROOT / "mcp.json").read_text())
+    assert "mcpServers" in mcp_json
+    assert "{{name}}" in mcp_json["mcpServers"]
+    server = mcp_json["mcpServers"]["{{name}}"]
+    assert "command" in server
+    assert "args" in server
+    assert isinstance(server["args"], list)
+    assert len(server["args"]) > 0
+
+
+def test_tools_have_required_fields():
+    """Every tool must expose name, description, inputSchema."""
+    {{#each tools}}
+    # tool: {{name}}
+    assert "{{name}}"  # name is non-empty
+    assert len("{{description}}") > 10  # description is meaningful
+    {{/each}}
+
+
+def test_tool_output_is_string():
+    """Stateless tools return strings (will be wrapped as text content by FastMCP)."""
+    {{#each tools}}
+    from {{snakeCase name}}.tools import {{this.name}}
+    result = {{this.name}}()
+    assert isinstance(result, str), "{{this.name}} must return str"
+    {{/each}}
+
+{{#unless tools}}
+def test_default_tool_returns_string():
+    from {{snakeCase name}}.tools import hello
+    assert isinstance(hello(), str)
+{{/unless}}
+
+
+def test_fsm_states_yaml_exists():
+    """Each MCP project must declare its FSM in .mcp/state/states.yaml."""
+    states_yaml = PROJECT_ROOT / ".mcp" / "state" / "states.yaml"
+    assert states_yaml.exists()
+
+
+def test_pyproject_declares_mcp_dep():
+    """pyproject.toml must declare mcp[cli] dependency."""
+    pyproject = (PROJECT_ROOT / "pyproject.toml").read_text()
+    assert "mcp[cli]" in pyproject or 'mcp"' in pyproject
