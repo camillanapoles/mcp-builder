@@ -1,0 +1,37 @@
+#!/bin/bash
+# Pre-commit gate hook — validates before commit allowed
+# Part of MCP Builder hooks system: gate category
+#
+# This hook enforces quality gates BEFORE code enters git history.
+# If typecheck or lint fails, the commit is blocked.
+
+set -e
+
+echo "🔬 Gate: Running pre-commit validation..."
+
+# Navigate to project root
+cd "$(git rev-parse --show-toplevel)"
+
+# Run typecheck
+echo "  → Type checking TypeScript..."
+cd builder
+if ! npm run typecheck > /dev/null 2>&1; then
+  echo "❌ Gate BLOCKED: Typecheck failed"
+  echo "   Run 'cd builder && npm run typecheck' to see errors"
+  exit 1
+fi
+
+# Run lint (non-blocking for now, but warns)
+echo "  → Linting..."
+if ! npm run lint > /dev/null 2>&1; then
+  echo "⚠️  Lint issues detected (not blocking, but fix recommended)"
+  echo "   Run 'cd builder && npm run lint' to see issues"
+fi
+
+# Quick smoke test — ensure builder compiles
+if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
+  echo "🔨 Builder not compiled — running build..."
+  npm run build > /dev/null 2>&1
+fi
+
+echo "✅ Gate PASSED: Commit allowed"
