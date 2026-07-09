@@ -1,0 +1,31 @@
+# Dependabot configuration for MCP Builder
+# Automatically monitors and fixes dependency vulnerabilities
+
+version: 2
+updates:
+  # Builder dependencies (TypeScript/Node)
+  - package-ecosystem: "npm"
+    directory: "/builder"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+    ignore:
+      # Allow major updates only for specific packages
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  # Examples directory (Python projects)
+  - package-ecosystem: "pip"
+    directory: "/examples/*/pyproject.toml"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+# Enable vulnerability alerts
+enable-security-fixes: true
