@@ -1,0 +1,68 @@
+#!/bin/bash
+# Pre-push advisor hook — validates quality before push to remote
+# Part of MCP Builder hooks system: advisor category
+#
+# This hook enforces quality gates BEFORE code leaves local environment.
+# Validates mutation score threshold and provides advisory feedback.
+#
+# Mutation threshold: 70% (configurable via MCP_MUTATION_THRESHOLD env)
+
+set -e
+
+echo "🎯 Advisor: Running pre-push validation..."
+
+# Navigate to project root
+cd "$(git rev-parse --show-toplevel)"
+
+# Get threshold (default 70%)
+THRESHOLD=${MCP_MUTATION_THRESHOLD:-70}
+echo "   Mutation threshold: ${THRESHOLD}%"
+
+# Check if mutation report exists and is recent
+cd builder
+if [ -f "reports/mutation/mutation.json" ]; then
+  # Extract score from Stryker report
+  SCORE=$(grep -oE '"mutationScore": [0-9.]+' reports/mutation/mutation.json | head -1 | awk '{print $2}' || echo "0")
+  SCORE_INT=$(printf "%.0f" "$SCORE")
+
+  echo "   Current mutation score: ${SCORE_INT}%"
+
+  if [ "$SCORE_INT" -lt "$THRESHOLD" ]; then
+    echo ""
+    echo "⚠️  Advisor RECOMMENDATION:"
+    echo "   Mutation score ($SCORE_INT%) is below threshold ($THRESHOLD%)"
+    echo ""
+    echo "   To improve coverage:"
+    echo "   1. Run 'npm run test:mutation' to see full report"
+    echo "   2. Add tests for survived mutants"
+    echo "   3. Consider running: npm run test:mutation -- --mutator '<mutator-name>'"
+    echo ""
+    echo "   Push will proceed, but consider addressing first."
+    echo ""
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "🚫 Push blocked by advisor"
+      exit 1
+    fi
+  else
+    echo "✅ Advisor APPROVED: Mutation score above threshold"
+  fi
+else
+  echo "⚠️  No mutation report found"
+  echo "   Run 'npm run test:mutation' first"
+  echo "   (Push will proceed, but mutation score unknown)"
+fi
+
+# Final check: ensure tests pass
+echo ""
+echo "   → Running quick test check..."
+if npm test > /dev/null 2>&1; then
+  echo "   ✅ Tests passing"
+else
+  echo "   ❌ Tests failing — push blocked"
+  exit 1
+fi
+
+echo ""
+echo "✅ Advisor: Pre-push validation complete"

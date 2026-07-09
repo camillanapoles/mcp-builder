@@ -97,6 +97,7 @@ export async function runAction(): Promise<void> {
 if (process.env.GITHUB_ACTIONS === 'true') {
   runAction().catch(err => {
     core.setFailed(`action failed: ${err.message}`);
-    process.exit(1);
+    // Note: process.exit(1) removed — core.setFailed() is sufficient for GitHub Actions
+    // and calling process.exit() would kill test processes that import this module
   });
 }

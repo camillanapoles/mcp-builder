@@ -1,0 +1,59 @@
+# MCP Builder — mise.toml
+# Environment isolation per GUARD 1: mise controls everything
+# Ensures reproducible dev environments across team
+
+[tools]
+# Node.js LTS for TypeScript builder
+node = "20"
+
+# TypeScript for type checking
+typescript = "latest"
+
+# Python for testing generated MCPs
+python = { version = "3.12", virtualenv = "false" }
+
+[env]
+# Ensure Node modules are on PATH
+PATH = "$PWD/node_modules/.bin:$PATH"
+
+# Builder output directory
+MCP_BUILDER_DIST = "$PWD/builder/dist"
+
+[tasks.build]
+description = "Build the builder"
+run = "cd builder && npm run build"
+
+[tasks.test]
+description = "Run all tests"
+run = "cd builder && npm test"
+
+[tasks.test-watch]
+description = "Run tests in watch mode"
+run = "cd builder && npm run test:watch"
+
+[tasks.typecheck]
+description = "Type check without emitting"
+run = "cd builder && npm run typecheck"
+
+[tasks.lint]
+description = "Run ESLint"
+run = "cd builder && npm run lint"
+
+[tasks.mutation]
+description = "Run mutation tests (Stryker)"
+run = "cd builder && npm run test:mutation"
+
+[tasks.ci]
+description = "Run full CI pipeline locally"
+depends = ["typecheck", "test"]
+run = "echo 'CI passed all gates'"
+
+# Hook aliases for local development
+[tasks.hooks-install]
+description = "Install git hooks"
+run = "cp .githooks/* .git/hooks/ 2>/dev/null || true"
+
+# Local monitoring
+[tasks.watch]
+description = "Watch builder/src/ for changes and auto-run build+test"
+run = "./scripts/watch.sh"
